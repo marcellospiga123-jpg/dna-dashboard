@@ -1,11 +1,17 @@
 from flask import Flask, jsonify, render_template_string
-import json
+import requests
+import base64
 import os
+import json
 
 app = Flask(__name__)
 
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+REPO = "marcellospiga123-jpg/dna-dashboard"
+FILE = "storico.json"
+
 HTML = """
-<h1>🚀 AI Trader Dashboard</h1>
+<h1>🚀 DNA Dashboard</h1>
 <button onclick="load()">Carica dati</button>
 <pre id="out"></pre>
 
@@ -26,11 +32,18 @@ def home():
 
 @app.route("/data")
 def data():
-    try:
-        with open("storico.json") as f:
-            return jsonify(json.load(f))
-    except:
-        return jsonify([])
+    url = f"https://api.github.com/repos/{REPO}/contents/{FILE}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+
+    r = requests.get(url, headers=headers)
+
+    if r.status_code != 200:
+        return jsonify({"error": "no data"})
+
+    data = r.json()
+
+    content = base64.b64decode(data["content"]).decode()
+    return jsonify(json.loads(content))
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=10000)
