@@ -1,91 +1,58 @@
-from flask import Flask, jsonify, render_template_string
-import requests
-import base64
-import os
-import json
+from flask import Flask, jsonify
+import requests, base64, json, os
 
 app = Flask(__name__)
 
 GITHUB_TOKEN = os.getenv("GH_TOKEN")
 REPO = os.getenv("REPO")
-FILE = "storico.json"
-
-HTML = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>DNA Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body>
-
-<h1>🚀 DNA Dashboard</h1>
-<button onclick="load()">Carica dati</button>
-
-<canvas id="chart" width="600" height="300"></canvas>
-
-<pre id="out"></pre>
-
-<script>
-async function load() {
-    let res = await fetch('/data');
-    let data = await res.json();
-
-    document.getElementById('out').innerText =
-        JSON.stringify(data, null, 2);
-
-    // GRAFICO
-    let labels = [];
-    let prezzi = [];
-
-    let first = Object.keys(data)[0];
-
-    if (first) {
-        let arr = data[first];
-
-        arr.forEach(x => {
-            labels.push(x.data);
-            prezzi.push(x.prezzo);
-        });
-    }
-
-    new Chart(document.getElementById('chart'), {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Prezzo',
-                data: prezzi
-            }]
-        }
-    });
-}
-</script>
-
-</body>
-</html>
-"""
-
-@app.route("/")
-def home():
-    return HTML
 
 @app.route("/data")
 def data():
-    url = f"https://api.github.com/repos/{REPO}/contents/{FILE}"
-
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}"
-    }
+    url = f"https://api.github.com/repos/{REPO}/contents/storico.json"
+    headers = {"Authorization": f"Bearer {GITHUB_TOKEN}"}
 
     r = requests.get(url, headers=headers)
 
     if r.status_code != 200:
-        return jsonify({})
+        return jsonify([])
 
     content = base64.b64decode(r.json()["content"]).decode()
+    storico = json.loads(content)
 
-    return jsonify(json.loads(content))
+    out = []
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    for nome, v in storico.items():
+        prezzi = [x["prezzo"] for x in v if x["prezzo"] > 0]
+        if not prezzi:
+            continue
+
+        attuale = prezzi[-1]
+        max_p = max(prezzi)
+        min_p = min(prezzi)
+        roi = ((max_p - attuale) / attuale * 100)
+
+        out.append({
+            "nome": nome,
+            "attuale": attuale,
+            "roi": round(roi, 2)
+        })
+
+    return jsonify(out)
+
+@app.route("/")
+def home():
+    return """
+    <h1>🚀 DNA DASHBOARD PRO</h1>
+    <button onclick="load()">Carica</button>
+    <pre id="out"></pre>
+
+    <script>
+    async function load(){
+        let r = await fetch('/data');
+        let d = await r.json();
+        document.getElementById('out').innerText = JSON.stringify(d,null,2);
+    }
+    </script>
+    """
+
+app.run()
